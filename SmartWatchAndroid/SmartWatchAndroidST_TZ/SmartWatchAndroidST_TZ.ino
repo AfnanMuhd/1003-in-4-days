@@ -21,8 +21,15 @@
 #include <TinyScreen.h>
 #include <STBLE.h>
 #include <Wire.h>
+#include "BMA250.h"       // For interfacing with the accel. sensor
 
 unsigned long millisOffsetCount = 0;
+
+// Accelerometer sensor variables for the sensor and its values
+BMA250 accel_sensor;
+int x, y, z;
+double temp;
+
 
 #define BLE_DEBUG true
 #define menu_debug_print true
@@ -151,6 +158,10 @@ void setup(void)
   delay(100);
   BLEsetup();
 
+   SerialMonitorInterface.print("Initializing BMA...");
+  // Set up the BMA250 acccelerometer sensor
+  accel_sensor.begin(BMA250_range_2g, BMA250_update_time_64ms); 
+
 #if defined(ARDUINO_ARCH_SAMD)
   // https://github.com/arduino/ArduinoCore-samd/issues/142
   // Clock EIC in sleep mode so that we can use pin change interrupts
@@ -197,6 +208,7 @@ void loop() {
       doVibrate = millisOffset();
     }
     ble_rx_buffer_len = 0;
+
   }
 
   if (doVibrate) {
@@ -223,6 +235,31 @@ void loop() {
 #endif
   }
   checkButtons();
+
+   accel_sensor.read();//This function gets new data from the acccelerometer
+
+  // Get the acceleration values from the sensor and store them into global variables
+  // (Makes reading the rest of the program easier)
+  x = accel_sensor.X;
+  y = accel_sensor.Y;
+  z = accel_sensor.Z;
+  temp = ((accel_sensor.rawTemp * 0.5) + 24.0);
+
+  // If the BMA250 is not found, nor connected correctly, these values will be produced
+  // by the sensor 
+  if (x == -1 && y == -1 && z == -1) {
+    // Print error message to Serial Monitor
+    SerialMonitorInterface.print("ERROR! NO BMA250 DETECTED!");
+  }
+  
+  else { // if we have correct sensor readings: 
+    showSerial();                 //Print to Serial Monitor or Plotter
+  }
+
+  // The BMA250 can only poll new sensor values every 64ms, so this delay
+  // will ensure that we can continue to read values
+  delay(250);
+  // ***Without the delay, there would not be any sensor output*** 
 }
 
 void updateTime(uint8_t * b) {
@@ -264,4 +301,19 @@ void checkButtons() {
   if (!buttonReleased && !(buttons & 0x0F)) {
     buttonReleased = 1;
   }
+}
+
+// Prints the sensor values to the Serial Monitor, or Serial Plotter (found under 'Tools')
+void showSerial() {
+  SerialMonitorInterface.print("X = ");
+  SerialMonitorInterface.print(x);
+  
+  SerialMonitorInterface.print("  Y = ");
+  SerialMonitorInterface.print(y);
+  
+  SerialMonitorInterface.print("  Z = ");
+  SerialMonitorInterface.print(z);
+  
+  SerialMonitorInterface.print("  Temperature(C) = ");
+  SerialMonitorInterface.println(temp);
 }
